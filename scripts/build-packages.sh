@@ -22,11 +22,18 @@ cd "$ROOT/cports"
 # default so the first minimal image does not rebuild LLVM, Rust and Python.
 # FULL_SOURCE=1 retains the expensive bootstrap-every-dependency mode.
 no_remote=
+source_runtime=
 if [ "${FULL_SOURCE:-0}" = 1 ]; then
     no_remote=-N
+    # dinit-chimera records command/SONAME runtime dependencies.  When remote
+    # repositories are disabled, their concrete providers must exist in the
+    # local repository even if dinit-chimera itself was built by an earlier
+    # non-FULL_SOURCE run.
+    source_runtime="main/kmod main/shadow main/snooze main/util-linux"
 fi
 # shellcheck disable=SC2086
 ./cbuild -c ../config/cbuild.ini -a "$ARCH" $no_remote pkg \
+    $source_runtime \
     main/dinit \
     main/dbus \
     main/dinit-chimera \
