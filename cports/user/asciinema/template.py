@@ -1,0 +1,12 @@
+pkgname = "asciinema"
+pkgver = "3.2.0"
+pkgrel = 0
+build_style = "cargo"
+hostmakedepends = ["cargo-auditable"]
+makedepends = ["rust-std"]
+checkdepends = ["python"]
+pkgdesc = "Terminal session recorder"
+license = "GPL-3.0-or-later"
+url = "https://github.com/asciinema/asciinema"
+source = f"{url}/archive/refs/tags/v{pkgver}.tar.gz"
+sha256 = "247c7c87481f38d7788c1fb1be12021c778676c0d0ab37e529ec528f87f487ce"

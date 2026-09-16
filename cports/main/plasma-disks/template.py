@@ -1,0 +1,32 @@
+pkgname = "plasma-disks"
+pkgver = "6.7.4"
+pkgrel = 0
+build_style = "cmake"
+make_check_wrapper = ["wlheadless-run", "--"]
+hostmakedepends = [
+    "cmake",
+    "extra-cmake-modules",
+    "gettext",
+    "ninja",
+    "pkgconf",
+]
+makedepends = [
+    "kauth-devel",
+    "kcmutils-devel",
+    "kcoreaddons-devel",
+    "kdbusaddons-devel",
+    "ki18n-devel",
+    "kio-devel",
+    "knotifications-devel",
+    "kservice-devel",
+    "qt6-qtdeclarative-devel",
+    "solid-devel",
+]
+depends = ["smartmontools"]
+checkdepends = ["xwayland-run"]
+pkgdesc = "KDE disk failure monitor"
+license = "GPL-2.0-only OR GPL-3.0-only"
+url = "https://invent.kde.org/plasma/plasma-disks"
+source = f"$(KDE_SITE)/plasma/{pkgver}/plasma-disks-{pkgver}.tar.xz"
+sha256 = "232d7f6343e5c8a5c5cfcff4e0f80fdfd0063e4aba79ebd8a431c66d9a58c13a"
+hardening = ["vis"]

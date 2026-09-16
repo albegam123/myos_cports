@@ -1,0 +1,37 @@
+pkgname = "libkscreen"
+pkgver = "6.7.4"
+pkgrel = 1
+build_style = "cmake"
+# testbackendloader testEnv(xrandr 1.1) 'preferred.fileName().startsWith(backend)' returned FALSE, flaky tests when parallel
+# testqscreenbackend & testinprocess broken (even on upstream CI) since v6.5.0 / e394a4c ("Drop QScreen backend")
+make_check_args = ["-E", "test(backendloader|qscreenbackend|inprocess)", "-j1"]
+# kscreen-testqscreenbackend needs X11
+make_check_wrapper = ["xwfb-run", "--"]
+hostmakedepends = ["cmake", "extra-cmake-modules", "ninja", "pkgconf"]
+makedepends = [
+    "plasma-wayland-protocols",
+    "qt6-qtbase-private-devel",  # qtx11extras_p.h/qtguiglobal_p.h
+    "qt6-qttools-devel",
+    "qt6-qtwayland-devel",
+]
+checkdepends = ["dbus-x11", "hwdata", "xwayland-run"]
+# depends = ["jq"] for zsh completions to work at their full capacity
+pkgdesc = "KDE screen management library"
+license = (
+    "LGPL-2.1-or-later AND GPL-2.0-or-later AND (GPL-2.0-only OR GPL-3.0-only)"
+)
+url = "https://invent.kde.org/plasma/libkscreen"
+source = f"$(KDE_SITE)/plasma/{pkgver}/libkscreen-{pkgver}.tar.xz"
+sha256 = "f40bfbd83147a7c7ff387ffe5053cc2ea000bdb21555a0b3d06da3c59d7b4977"
+# traps on some setups?
+# https://github.com/chimera-linux/cports/issues/4960
+hardening = ["!int"]
+
+
+def post_install(self):
+    self.uninstall("usr/lib/systemd/user")
+
+
+@subpackage("libkscreen-devel")
+def _(self):
+    return self.default_devel()

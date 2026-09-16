@@ -1,0 +1,10 @@
+/out/
+/cports/bldroot*/
+/cports/builddir/
+/cports/cbuild_cache/
+/cports/packages/
+/cports/pkgstage/
+/cports/sources/
+/cports/etc/config.ini
+/cports/etc/keys/*.rsa
+**/target/

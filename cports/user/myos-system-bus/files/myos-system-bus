@@ -1,0 +1,5 @@
+type = process
+command = /usr/bin/myos-system-bus
+restart = true
+smooth-recovery = true
+depends-on: dbus

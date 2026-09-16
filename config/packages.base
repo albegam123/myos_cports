@@ -1,0 +1,3 @@
+# The policy metapackage pulls only the requested boot/service components and
+# their unavoidable runtime dependencies.
+myos-base

@@ -1,0 +1,41 @@
+pkgname = "kwallet"
+pkgver = "6.29.0"
+pkgrel = 0
+build_style = "cmake"
+hostmakedepends = [
+    "cmake",
+    "extra-cmake-modules",
+    "gettext",
+    "ninja",
+    "pkgconf",
+]
+makedepends = [
+    "gpgmepp-devel",
+    "kcolorscheme-devel",
+    "kconfig-devel",
+    "kcoreaddons-devel",
+    "kcrash-devel",
+    "kdbusaddons-devel",
+    "kdoctools-devel",
+    "ki18n-devel",
+    "knotifications-devel",
+    "kservice-devel",
+    "kwidgetsaddons-devel",
+    "kwindowsystem-devel",
+    "libgcrypt-devel",
+    "libsecret-devel",
+    "qca-devel",
+    "qt6-qtdeclarative-devel",
+    "qt6-qttools-devel",
+]
+pkgdesc = "KDE Safe desktop-wide storage for passwords"
+license = "LGPL-2.1-or-later"
+url = "https://community.kde.org/Frameworks"
+source = f"$(KDE_SITE)/frameworks/{pkgver[: pkgver.rfind('.')]}/kwallet-{pkgver}.tar.xz"
+sha256 = "66a47fc170ea074cce8b916fa313f309d7c9497bd2132e0598d4b63bbad2ac88"
+hardening = ["vis"]
+
+
+@subpackage("kwallet-devel")
+def _(self):
+    return self.default_devel()

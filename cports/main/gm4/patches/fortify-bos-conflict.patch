@@ -1,0 +1,31 @@
+GNU m4 1.4.19 carries an old gnulib cdefs.h which defines a one-argument
+__bos macro.  This collides with fortify-headers, whose __bos macro takes
+two arguments, when a fortify wrapper is included after cdefs.h.
+
+Keep these compatibility helpers private to gnulib.  They are only used
+to implement __glibc_objsize and __glibc_objsize0 in this header.
+
+--- a/lib/cdefs.h
++++ b/lib/cdefs.h
+@@ -139,8 +139,8 @@
+ 
+ 
+ /* Fortify support.  */
+-#define __bos(ptr) __builtin_object_size (ptr, __USE_FORTIFY_LEVEL > 1)
+-#define __bos0(ptr) __builtin_object_size (ptr, 0)
++#define __gnulib_bos(ptr) __builtin_object_size (ptr, __USE_FORTIFY_LEVEL > 1)
++#define __gnulib_bos0(ptr) __builtin_object_size (ptr, 0)
+ 
+ /* Use __builtin_dynamic_object_size at _FORTIFY_SOURCE=3 when available.  */
+ #if __USE_FORTIFY_LEVEL == 3 && __glibc_clang_prereq (9, 0)
+@@ -148,8 +148,8 @@
+ # define __glibc_objsize0(__o) __builtin_dynamic_object_size (__o, 0)
+ # define __glibc_objsize(__o) __builtin_dynamic_object_size (__o, 1)
+ #else
+-# define __glibc_objsize0(__o) __bos0 (__o)
+-# define __glibc_objsize(__o) __bos (__o)
++# define __glibc_objsize0(__o) __gnulib_bos0 (__o)
++# define __glibc_objsize(__o) __gnulib_bos (__o)
+ #endif
+ 
+ #if __GNUC_PREREQ (4,3)
