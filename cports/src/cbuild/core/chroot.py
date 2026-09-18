@@ -391,6 +391,10 @@ def _setup_dummy(rootp, archn):
     llvm_ver = _get_ver("llvm")
 
     provides = [
+        # allow -bootstrap packages (e.g. gnutls-bootstrap via ngtcp2) to be
+        # installed into cross target sysroots; on native builds this virtual
+        # comes from base-cbuild in the build container instead
+        "bootstrap:cbuild=9999-r0",
         f"base-files={files_ver}",
         f"fortify-headers={fortify_ver}",
         f"libatomic-chimera={atomic_ver}",
