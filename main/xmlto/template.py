@@ -16,6 +16,7 @@ depends = ["bash", "ugetopt", "libxslt-progs", "docbook-xsl-nons"]
 pkgdesc = "Tool to help transform XML documents into other formats"
 license = "GPL-2.0-or-later"
 url = "https://pagure.io/xmlto"
-source = f"{url}/archive/{pkgver}/xmlto-{pkgver}.tar.gz"
+# pagure.io git-archive URLs are gone (404); use the uploaded release tarball.
+source = f"https://releases.pagure.org/xmlto/xmlto-{pkgver}.tar.gz"
 sha256 = "40504db68718385a4eaa9154a28f59e51e59d006d1aa14f5bc9d6fded1d6017a"
 hardening = ["vis", "cfi"]
