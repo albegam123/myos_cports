@@ -8,6 +8,9 @@ configure_args = [
 ]
 hostmakedepends = [
     "automake",
+    # gen_tables.c is built with CC_FOR_BUILD and includes <linux/net.h>;
+    # in cross builds makedepends only land in the target sysroot
+    "linux-headers",
     "pkgconf",
     "slibtool",
 ]
