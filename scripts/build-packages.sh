@@ -39,7 +39,9 @@ fi
     main/dinit-chimera \
     main/dinit-dbus \
     main/iwd \
+    main/perf \
     user/armybox \
+    user/bpftrace \
     user/myos-initrd \
     user/myos-system-bus \
     user/myos-base

@@ -1,3 +1,6 @@
 # The policy metapackage pulls only the requested boot/service components and
 # their unavoidable runtime dependencies.
 myos-base
+# Observability tooling, built from source by scripts/build-packages.sh.
+perf
+bpftrace
