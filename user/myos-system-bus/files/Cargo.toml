@@ -1,0 +1,16 @@
+[package]
+name = "myos-system-bus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "MIT"
+publish = false
+
+[dependencies]
+zbus = { version = "=5.19.0", default-features = true }
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+panic = "abort"

@@ -1,6 +1,6 @@
 pkgname = "perf"
 pkgver = "6.18.4"
-pkgrel = 1
+pkgrel = 3
 build_wrksrc = "tools/perf"
 build_style = "makefile"
 make_build_args = [
@@ -8,6 +8,7 @@ make_build_args = [
     "Makefile.perf",
     "LIBBPF_DYNAMIC=1",
     "LLVM=1",
+    "NO_DEBUGINFOD=1",
     "NO_LIBAUDIT=1",
     "NO_LIBBABELTRACE=1",
     "NO_LIBPFM4=1",
@@ -32,10 +33,16 @@ hostmakedepends = [
     "asciidoc",
     "bash",
     "bison",
+    "elfutils-devel",
     "flex",
+    "linux-headers",
+    "openssl3-devel",
     "pkgconf",
+    "python",
     "python-setuptools",
     "xmlto",
+    "zlib-ng-compat-devel",
+    "zstd-devel",
 ]
 makedepends = [
     "audit-devel",  # for archs without syscall_table like riscv
@@ -67,8 +74,39 @@ if self.profile().arch == "ppc":
 
 
 def init_build(self):
+    from cbuild.util import linux
+
     self.make_build_args += [f"EXTRA_CFLAGS={self.get_cflags(shell=True)}"]
     self.make_install_args += [f"EXTRA_CFLAGS={self.get_cflags(shell=True)}"]
+
+    if self.profile().cross:
+        # perf detects clang and rewrites CC := $(CLANG) ..., dropping the
+        # aarch64-*-clang wrapper. Without CROSS_COMPILE the feature checks
+        # look at host headers, fail to find libelf.h, and misreport that as
+        # a missing glibc gnu/libc-version.h.
+        # Do not pass --sysroot=.../usr here: clang needs the triplet root
+        # (profile.sysroot), which the *-clang argv0 wrapper already sets.
+        #
+        # PYTHON detection goes through python*-config, which lives only in
+        # the target sysroot when cross-building; point at it explicitly and
+        # keep a host interpreter for jevents generation.
+        trip = self.profile().triplet
+        pyconf = self.profile().sysroot / "usr/bin/python3-config"
+        # LIBBPF_DYNAMIC never sets LIBBPF_INCLUDE; native builds find
+        # bpf/bpf_helpers.h via clang's default -idirafter /usr/include.
+        # Cross BPF compiles use --target=bpf and need the sysroot path.
+        bpfinc = self.profile().sysroot / "usr/include"
+        cross = [
+            f"ARCH={linux.get_arch(self)}",
+            f"CROSS_COMPILE={trip}-",
+            f"CLANG={trip}-clang",
+            f"CXX={trip}-clang++",
+            "PYTHON=python3",
+            f"PYTHON_CONFIG={pyconf}",
+            f"LIBBPF_INCLUDE={bpfinc}",
+        ]
+        self.make_build_args += cross
+        self.make_install_args += cross
 
 
 def post_install(self):

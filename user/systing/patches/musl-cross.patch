@@ -1,0 +1,59 @@
+diff -Naur systing-1.14.0.orig/build.rs systing-1.14.0/build.rs
+--- systing-1.14.0.orig/build.rs	2026-08-16 08:35:25.000000000 +0000
++++ systing-1.14.0/build.rs	2026-09-19 15:05:03.153721414 +0000
+@@ -40,6 +40,9 @@
+         let candidates = [
+             format!("/usr/include/{triplet}"),
+             format!("/usr/{triplet}/include"),
++            // Chimera Linux / cports cross sysroot
++            format!("/usr/{target_arch}-chimera-linux-musl/usr/include"),
++            format!("/usr/{target_arch}-chimera-linux-gnu/usr/include"),
+         ];
+         for dir in &candidates {
+             if Path::new(dir).exists() {
+diff -Naur systing-1.14.0.orig/Cargo.toml systing-1.14.0/Cargo.toml
+--- systing-1.14.0.orig/Cargo.toml	2026-08-17 01:26:19.000000000 +0000
++++ systing-1.14.0/Cargo.toml	2026-09-19 15:05:03.092719774 +0000
+@@ -12,8 +12,8 @@
+ description = "A libbpf based tracer to figure out what an application is doing"
+ 
+ [build-dependencies]
+-libbpf-cargo = "0.25.0-beta"
+-libbpf-rs = "0.25.0"
++libbpf-cargo = { version = "0.25.0-beta", default-features = false }
++libbpf-rs = { version = "0.25.0", default-features = false }
+ 
+ [features]
+ default = ["duckdb-bundled"]
+@@ -38,7 +38,7 @@
+ arrow = "54"
+ flate2 = "1.0"
+ indicatif = "0.17"
+-libbpf-rs = "0.25.0"
++libbpf-rs = { version = "0.25.0", default-features = false }
+ libc = "0.2"
+ nix = { version = "0.29.0", features = ["ioctl"] }
+ perfetto_protos = "0.48.1"
+diff -Naur systing-1.14.0.orig/src/stack_recorder.rs systing-1.14.0/src/stack_recorder.rs
+--- systing-1.14.0.orig/src/stack_recorder.rs	2026-08-17 00:34:54.000000000 +0000
++++ systing-1.14.0/src/stack_recorder.rs	2026-09-19 15:05:03.121720553 +0000
+@@ -1327,7 +1327,8 @@
+                         }
+                     }
+                     if evicted > 0 {
+-                        // SAFETY: malloc_trim is always safe to call on glibc.
++                        // SAFETY: malloc_trim is glibc-only; no-op on musl.
++                        #[cfg(target_env = "gnu")]
+                         unsafe {
+                             libc::malloc_trim(0);
+                         }
+@@ -1351,7 +1352,8 @@
+                 // A full rebuild drops the whole cache, so the touched-ELF set
+                 // no longer reflects what blazesym holds.
+                 touched_elf.clear();
+-                // SAFETY: malloc_trim is always safe to call on glibc.
++                // SAFETY: malloc_trim is glibc-only; no-op on musl.
++                #[cfg(target_env = "gnu")]
+                 unsafe {
+                     libc::malloc_trim(0);
+                 }

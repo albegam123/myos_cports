@@ -1,10 +1,10 @@
 pkgname = "dinit-dbus"
 pkgver = "0_git20260624"
-pkgrel = 0
+pkgrel = 1
 _gitrev = "5662aa890b08e7daec58942fdaae5b105cb881af"
 build_style = "meson"
 hostmakedepends = ["meson", "pkgconf"]
-makedepends = ["dinit-chimera", "dbus-devel", "libdinitctl-devel"]
+makedepends = ["dinit-chimera", "dbus", "dbus-devel", "libdinitctl-devel"]
 checkdepends = ["dbus"]
 depends = ["dbus"]
 replaces = ["dbus-dinit<1.14.10-r14"]

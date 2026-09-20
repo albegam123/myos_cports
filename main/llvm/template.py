@@ -114,9 +114,10 @@ if self.stage > 0:
         make_build_env = {"LD_LIBRARY_PATH": "/usr/lib/llvm-bootstrap/lib"}
     else:
         configure_args += ["-DLLVM_ENABLE_LLD=ON"]
-        # don't build flang/mlir for stage 1 to save time
+        # Host tablegen / clang-tidy helpers for the cross build.
+        # mlir is not cross-built (see init_configure); skip host mlir too.
         if self.stage >= 2:
-            hostmakedepends += ["llvm", "clang-tools-extra", "mlir"]
+            hostmakedepends += ["llvm", "clang-tools-extra"]
 else:
     configure_args += [
         "-DLLVM_ENABLE_LLD=ON",
@@ -131,8 +132,8 @@ else:
         "-DCOMPILER_RT_BUILD_CTX_PROFILE=OFF",
     ]
 
-# from stage 2 only, pointless to build before
-_enable_mlir = self.stage >= 2
+# from stage 2 only on native builds; cross skips mlir/flang (see init_configure)
+_enable_mlir = self.stage >= 2 and not self.profile().cross
 _enable_flang = _enable_mlir and self.profile().wordsize == 64
 
 if _enable_mlir:
@@ -173,18 +174,26 @@ def init_configure(self):
             ]
         return
 
-    # grab these from the host
+    # Cross: never build mlir/flang. Host lacks mlir-irdl-to-cpp and
+    # llvm-min-tblgen; nested NATIVE builds otherwise inherit the target
+    # toolchain and die with "Exec format error".
+    self.configure_args = [
+        a
+        for a in self.configure_args
+        if not a.startswith("-DLLVM_ENABLE_PROJECTS=")
+    ]
     self.configure_args += [
+        "-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld",
         "-DLLVM_NATIVE_TOOL_DIR=/usr/bin",
         "-DLLVM_CONFIG_PATH=/usr/bin/llvm-config",
         "-DLLVM_TABLEGEN=/usr/bin/llvm-tblgen",
+        # llvm-min-tblgen is not installed; llvm-tblgen covers -gen-vt etc.
         "-DLLVM_HEADERS_TABLEGEN=/usr/bin/llvm-tblgen",
         "-DCLANG_TABLEGEN=/usr/bin/clang-tblgen",
         "-DCLANG_TIDY_CONFUSABLE_CHARS_GEN=/usr/bin/clang-tidy-confusable-chars-gen",
-        "-DMLIR_TABLEGEN=/usr/bin/mlir-tblgen",
-        "-DMLIR_PDLL_TABLEGEN=/usr/bin/mlir-pdll",
-        "-DMLIR_MLIR_SRC_SHARDER_TABLEGEN=/usr/bin/mlir-src-sharder",
-        "-DMLIR_LINALG_ODS_YAML_GEN=/usr/bin/mlir-linalg-ods-yaml-gen",
+        # Nested NATIVE tool builds must use the host compiler, not the
+        # cross toolchain inherited via CC/CXX in the environment.
+        "-DCROSS_TOOLCHAIN_FLAGS_NATIVE=-DCMAKE_C_COMPILER=/usr/bin/clang;-DCMAKE_CXX_COMPILER=/usr/bin/clang++;-DCMAKE_ASM_COMPILER=/usr/bin/clang;-DCMAKE_C_COMPILER_TARGET=;-DCMAKE_CXX_COMPILER_TARGET=;-DCMAKE_ASM_COMPILER_TARGET=",
     ]
 
 

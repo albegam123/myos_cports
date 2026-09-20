@@ -1,0 +1,30 @@
+when cross-compiling, top-level EXTRA_CFLAGS/LDFLAGS (and cbuild's
+exported LDFLAGS with -L into the target sysroot) leak into the host
+bpftool bootstrap and make it link against the wrong architecture.
+
+Also pass PYTHON_EMBED_CCOPTS into the setuptools extension build; without
+that, setup.py only sees host Python include paths (missing under cross).
+
+--- a/tools/perf/Makefile.perf
++++ b/tools/perf/Makefile.perf
+@@ -744,7 +744,7 @@
+ 
+ $(OUTPUT)python/perf$(PYTHON_EXTENSION_SUFFIX): util/python.c util/setup.py $(PERFLIBS_PY)
+ 	$(QUIET_GEN)LDSHARED="$(CC) -pthread -shared" \
+-        CFLAGS='$(CFLAGS)' LDFLAGS='$(LDFLAGS) $(LIBS_PY)' \
++        CFLAGS='$(CFLAGS) $(PYTHON_EMBED_CCOPTS)' LDFLAGS='$(LDFLAGS) $(LIBS_PY)' \
+ 	  $(PYTHON_WORD) util/setup.py \
+ 	  --quiet build_ext; \
+ 	cp $(PYTHON_EXTBUILD_LIB)perf*.so $(OUTPUT)python/
+@@ -1210,8 +1210,9 @@
+ endif
+ 
+ $(BPFTOOL): | $(SKEL_TMP_OUT)
+-	$(Q)CFLAGS= $(MAKE) -C ../bpf/bpftool \
+-		OUTPUT=$(SKEL_TMP_OUT)/ bootstrap
++	$(Q)CFLAGS= LDFLAGS= $(MAKE) -C ../bpf/bpftool \
++		OUTPUT=$(SKEL_TMP_OUT)/ EXTRA_CFLAGS= \
++		bootstrap
+ 
+ # Paths to search for a kernel to generate vmlinux.h from.
+ VMLINUX_BTF_ELF_PATHS ?= $(if $(O),$(O)/vmlinux)			\

@@ -1,13 +1,16 @@
 pkgname = "elfutils"
 pkgver = "0.193"
-pkgrel = 0
+pkgrel = 1
 build_style = "gnu_configure"
 configure_args = [
     "--disable-nls",
     "--disable-werror",
-    "--enable-debuginfod",
+    # MyOS: debuginfod pulls curl → gnutls → unbound → protobuf-c →
+    # protobuf/boost/abseil solely for remote debug-symbol download.
+    # Keep the core ELF/DWARF libraries only.
+    "--disable-debuginfod",
     "--enable-deterministic-archives",
-    "--enable-libdebuginfod",
+    "--disable-libdebuginfod",
     "--with-zstd",
     "--program-prefix=eu-",
 ]
@@ -22,14 +25,9 @@ makedepends = [
     "argp-standalone",
     "bzip2-devel",
     "chimerautils-devel",
-    "curl-devel",
-    "json-c-devel",
-    "libarchive-devel",
-    "libmicrohttpd-devel",
     "linux-headers",
     "musl-bsd-headers",
     "musl-obstack-devel",
-    "sqlite-devel",
     "xz-devel",
     "zlib-ng-compat-devel",
     "zstd-devel",
@@ -60,32 +58,6 @@ def post_build(self):
 
 def post_install(self):
     self.rename("usr/bin/eu-eustack", "eu-stack")
-
-
-@subpackage("elfutils-debuginfod")
-def _(self):
-    self.subdesc = "debuginfod"
-    # transitional
-    self.provides = [self.with_pkgver("debuginfod")]
-
-    return [
-        "usr/bin/debuginfod*",
-        "usr/share/man/man[18]/debuginfod*",
-    ]
-
-
-@subpackage("elfutils-debuginfod-libs")
-def _(self):
-    self.subdesc = "debuginfod library"
-    # transitional
-    self.provides = [self.with_pkgver("debuginfod-libs")]
-    self.options = ["etcfiles"]
-
-    return [
-        "etc/profile.d",
-        "usr/lib/libdebuginfod.so.*",
-        "usr/lib/libdebuginfod-*.so",
-    ]
 
 
 @subpackage("elfutils-libs")

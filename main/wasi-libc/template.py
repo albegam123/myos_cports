@@ -1,6 +1,6 @@
 pkgname = "wasi-libc"
 pkgver = "0.20250204"
-pkgrel = 0
+pkgrel = 5
 _gitrev = "e9524a0980b9bb6bb92e87a41ed1055bdda5bb86"
 hostmakedepends = ["bash"]
 pkgdesc = "WebAssembly libc implementation"
@@ -17,6 +17,12 @@ _targets = [
     ("wasm32-wasip2", "WASI_SNAPSHOT=p2"),
 ]
 
+# clang 22+ -Wunterminated-string-initialization breaks intentional
+# fixed-size char table inits under -Werror (vfprintf, pleval, …).
+_extra_cflags = (
+    "-O2 -DNDEBUG -Wno-error=unterminated-string-initialization"
+)
+
 
 def build(self):
     for tgt in _targets:
@@ -25,14 +31,17 @@ def build(self):
             f"-j{self.make_jobs}",
             "CC=clang",
             f"TARGET_TRIPLE={tgt[0]}",
+            f"EXTRA_CFLAGS={_extra_cflags}",
             tgt[1],
         )
 
 
 def install(self):
+    # Avoid default TARGET_TRIPLE=wasm32-wasi (deprecated under clang 22).
     self.do(
         "make",
         "install",
+        "TARGET_TRIPLE=wasm32-wasip1",
         f"INSTALL_DIR={self.chroot_destdir / 'usr/wasm32-unknown-wasi'}",
     )
     self.install_license("LICENSE")

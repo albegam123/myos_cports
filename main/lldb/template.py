@@ -9,12 +9,23 @@ configure_args = [
     "-DLLDB_ENABLE_PYTHON=ON",
     "-DLLDB_ENABLE_LIBEDIT=ON",
 ]
+# Cross builds a host lldb-tblgen first. That configure is a standalone
+# LLVM/Clang consumer and looks in /usr (NO_CMAKE_FIND_ROOT_PATH), so the
+# devel packages must be host dependencies, not only target makedepends.
 hostmakedepends = [
+    "clang-devel",
     "cmake",
+    "libedit-devel",
+    "libffi8-devel",
+    "libxml2-devel",
+    "llvm-devel",
+    "ncurses-devel",
     "ninja",
     "pkgconf",
     "python-devel",
     "swig",
+    "xz-devel",
+    "zlib-ng-compat-devel",
 ]
 makedepends = [
     "clang-devel",
@@ -40,11 +51,20 @@ cmake_dir = "lldb"
 
 
 def init_configure(self):
-    if self.profile().cross:
-        self.configure_args += [
-            "-DLLDB_TABLEGEN="
-            + str(self.chroot_cwd / "build_host/bin/lldb-tblgen")
-        ]
+    if not self.profile().cross:
+        return
+
+    # LLDBStandalone uses find_package(... NO_CMAKE_FIND_ROOT_PATH), so the
+    # target build must be pointed at the sysroot explicitly. Host
+    # llvm-devel/clang-devel exist only so the host lldb-tblgen can be built.
+    sroot = self.profile().sysroot
+    self.configure_args += [
+        "-DLLDB_TABLEGEN_EXE="
+        + str(self.chroot_cwd / "build_host/bin/lldb-tblgen"),
+        "-DLLVM_TABLEGEN=/usr/bin/llvm-tblgen",
+        f"-DLLVM_DIR={sroot}/usr/lib/cmake/llvm",
+        f"-DClang_DIR={sroot}/usr/lib/cmake/clang",
+    ]
 
 
 def pre_configure(self):
@@ -57,8 +77,15 @@ def pre_configure(self):
 
     with self.profile("host"):
         with self.stamp("host_lldb_configure"):
-            # need to pass the triplets so builtins are found
-            cmake.configure(self, "build_host", self.cmake_dir, [])
+            cmake.configure(
+                self,
+                "build_host",
+                self.cmake_dir,
+                [
+                    "-DLLVM_DIR=/usr/lib/cmake/llvm",
+                    "-DClang_DIR=/usr/lib/cmake/clang",
+                ],
+            )
 
         with self.stamp("host_lldb_tblgen") as s:
             s.check()

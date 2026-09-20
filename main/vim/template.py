@@ -1,6 +1,6 @@
 pkgname = "vim"
 pkgver = "9.1.0880"
-pkgrel = 3
+pkgrel = 4
 build_style = "gnu_configure"
 configure_args = [
     "--enable-acl",
@@ -8,7 +8,8 @@ configure_args = [
     # makes them dynamically loaded so we don't install every scripting language
     # by default
     "--enable-luainterp=dynamic",
-    "--enable-rubyinterp=dynamic",
+    # rubyinterp pulls ruby → rust (YJIT); not needed for vim-xxd / MyOS
+    "--enable-rubyinterp=no",
     "--enable-python3interp=dynamic",
     "--with-compiledby=Chimera Linux",
     "--without-x",
@@ -23,7 +24,6 @@ makedepends = [
     "lua5.4-devel",
     "ncurses-devel",
     "python-devel",
-    "ruby-devel",
 ]
 depends = [self.with_pkgver("vim-xxd")]
 pkgdesc = "Vi-style text editor"

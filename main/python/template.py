@@ -1,7 +1,7 @@
 pkgname = "python"
 pkgver = "3.14.6"
 _majver = pkgver[: pkgver.rfind(".")]
-pkgrel = 1
+pkgrel = 2
 build_style = "gnu_configure"
 configure_args = [
     "--enable-ipv6",
@@ -102,7 +102,8 @@ match self.profile().arch:
 
 def init_configure(self):
     if not self.profile().cross and self.has_lto():
-        self.configure_args += ["--enable-optimizations"]
+        # CPython's PGO training tests are flaky in the musl source-bootstrap
+        # sandbox. cbuild still supplies ThinLTO through its tool flags.
         if _has_tail:
             self.configure_args += ["--with-tail-call-interp"]
     bigend = "yes" if (self.profile().endian == "big") else "no"

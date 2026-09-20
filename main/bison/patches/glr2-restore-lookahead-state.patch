@@ -1,0 +1,18 @@
+From: MyOS <myos@localhost>
+Subject: glr2.cc: keep lookahead state in sync when restoring a stack
+
+yyundeleteLastStack() restores an entry in yystates but leaves the parallel
+yylookaheadNeeds vector empty.  A later yyremoveDeletes() then accesses the
+missing element.  Recent libc++ exposes this as an illegal-instruction trap in
+the vector<bool> implementation.
+
+--- a/data/skeletons/glr2.cc
++++ b/data/skeletons/glr2.cc
+@@ -1098,6 +1098,7 @@ namespace
+       if (yylastDeleted == YY_NULLPTR || !yystates.empty ())
+         return;
+       yystates.push_back (yylastDeleted);
++      yylookaheadNeeds.push_back (false);
+       YYCDEBUG << "Restoring last deleted stack as stack #0.\n";
+       clearLastDeleted ();
+     }

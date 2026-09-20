@@ -20,7 +20,10 @@ makedepends = ["ncurses-devel"]
 pkgdesc = "GNU Readline library"
 license = "GPL-3.0-or-later"
 url = "https://tiswww.cwru.edu/php/chet/readline/rltop.html"
-source = f"https://git.savannah.gnu.org/cgit/readline.git/snapshot/readline-{_gitrev}.tar.gz"
+source = (
+    f"https://codeload.github.com/GitMirroring/readline/tar.gz/{_gitrev}"
+    f">readline-{_gitrev}.tar.gz"
+)
 sha256 = "cbf75f73fd1bbdfd75b3988c401d6769aad6057ac79241127a7b44a79d89ae0c"
 
 

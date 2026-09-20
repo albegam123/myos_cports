@@ -1,0 +1,31 @@
+From: MyOS cports <cports@myos.local>
+Subject: [PATCH] avoid ambiguous negated string comparison
+
+Perl 5.42 diagnoses "! $value eq ''" under warnings as a possible
+precedence error.  texi2any's tests intentionally compare stderr with
+reference output, so this warning makes the whole Perl converter test group
+fail even though conversion succeeds.  Spell the intended non-empty string
+test directly.
+
+--- a/tp/Texinfo/Convert/Converter.pm
++++ b/tp/Texinfo/Convert/Converter.pm
+@@ -386,7 +386,7 @@ sub output_internal {
+
+   my $fh;
+   my $encoded_output_file;
+-  if (! $output_file eq '') {
++  if ($output_file ne '') {
+     my $path_encoding;
+     ($encoded_output_file, $path_encoding)
+       = $self->encoded_output_file_name($output_file);
+--- a/tp/Texinfo/Convert/LaTeX.pm
++++ b/tp/Texinfo/Convert/LaTeX.pm
+@@ -1085,7 +1085,7 @@ sub convert {
+
+   my $fh;
+   my $encoded_output_file;
+-  if (! $output_file eq '') {
++  if ($output_file ne '') {
+     my $path_encoding;
+     ($encoded_output_file, $path_encoding)
+       = $self->encoded_output_file_name($output_file);

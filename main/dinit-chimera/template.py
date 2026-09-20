@@ -1,6 +1,6 @@
 pkgname = "dinit-chimera"
 pkgver = "0.99.24"
-pkgrel = 0
+pkgrel = 1
 build_style = "meson"
 configure_args = [
     "-Ddefault-path-env=/usr/bin",
@@ -39,14 +39,12 @@ sha256 = "7427126e0341d8c7c19e687b10d7d13896c3e8d591eabc0e25874be3cc60fb32"
 hardening = ["vis", "cfi"]
 options = ["brokenlinks"]
 
-_have_kexec_tools = self.profile().arch in [
-    "aarch64",
-    "armhf",
-    "armv7",
-    "ppc64",
-    "ppc64le",
-    "x86_64",
-]
+# MyOS does not ship crash-dump support.  Leaving this on would make
+# FULL_SOURCE builds pull makedumpfile → elfutils/debuginfod → GnuTLS →
+# unbound → protobuf-c → protobuf/abseil/boost, none of which belong in
+# the minimal image.  try-kdump.sh in the main package no-ops if kdump.sh
+# is absent.
+_have_kexec_tools = False
 
 
 def post_install(self):
@@ -82,6 +80,8 @@ def post_install(self):
     # provided by base-files
     self.uninstall("usr/lib/tmpfiles.d/var.conf")
     self.uninstall("usr/lib/tmpfiles.d/tmp.conf")
+    # kdump subpackage is disabled; do not leave the helper in the parent.
+    self.uninstall("usr/lib/dinit.d/early/scripts/kdump.sh")
 
 
 @subpackage("dinit-chimera-kdump", _have_kexec_tools)
