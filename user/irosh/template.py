@@ -1,6 +1,6 @@
 pkgname = "irosh"
 pkgver = "0.5.0"
-pkgrel = 1
+pkgrel = 3
 build_style = "cargo"
 make_build_args = ["--package", "irosh-cli", "--bin", "irosh"]
 hostmakedepends = ["cargo-auditable"]
@@ -25,5 +25,6 @@ def install(self):
     self.install_service(self.files_path / "irosh")
     self.install_service(self.files_path / "irosh-bootstrap")
     self.install_file(self.files_path / "irosh-bootstrap.sh", "usr/lib", mode=0o755)
+    self.install_file(self.files_path / "irosh-connect-info.sh", "usr/lib/profile.d")
     self.install_license(self.files_path / "LICENSE-MIT", "LICENSE-MIT")
     self.install_license(self.files_path / "LICENSE-APACHE", "LICENSE-APACHE")

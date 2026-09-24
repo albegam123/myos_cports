@@ -1,5 +1,5 @@
 type = process
-command = /usr/bin/irosh host --simple
+command = /usr/bin/irosh --state /root/.irosh/server host --simple
 logfile = /var/log/irosh.log
 restart = true
 smooth-recovery = true
