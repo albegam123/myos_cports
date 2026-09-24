@@ -1,0 +1,48 @@
+# --- Rust / Cargo ---
+/target/
+**/*.rs.bk
+# This workspace ships a CLI binary and the cports package builds with the
+# locked dependency graph, so Cargo.lock is intentionally versioned.
+
+# --- Irosh Local State & Secrets ---
+# Private keys and trust material MUST NEVER be committed.
+.irosh/
+.state/
+**/state/
+*.secret
+node.secret
+shadow.hash
+
+# --- Test Data & Temporary Files ---
+temp/
+tmp/
+cli/test/test-client/
+/test-client/
+*.log
+
+# --- IDEs & Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- Documentation & Meta ---
+api-guidelines
+/notes
+/irosh.service
+/irosh.plist
+
+# Scratch symlink to private project memory
+/scratch
+
+# Local shared agent-rules symlink
+/.agent-rules
+
+# Local AI tooling metadata
+.antigravitycli/
+.kilo

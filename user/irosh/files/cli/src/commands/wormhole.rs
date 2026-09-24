@@ -1,0 +1,320 @@
+use crate::context::CliContext;
+use crate::ui::Ui;
+use crate::ui::messages;
+use anyhow::Result;
+use console::style;
+use irosh::{IpcClient, IpcCommand, IpcResponse, Server, ServerOptions, StateConfig};
+use std::path::Path;
+
+#[must_use]
+pub async fn exec(
+    mut code: Option<String>,
+    passwd: bool,
+    persistent: bool,
+    ctx: &CliContext,
+) -> Result<()> {
+    let state_root = ctx.server_state_root()?;
+    let state = ctx.server_state()?;
+
+    let ipc_client = IpcClient::new(&state_root);
+
+    // Check if daemon is running. On slow machines (like Windows services starting up),
+    // we retry a few times to give the daemon time to become reachable via IPC.
+    let mut daemon_running = matches!(
+        ipc_client.send(IpcCommand::GetStatus).await,
+        Ok(IpcResponse::Status(_))
+    );
+    if !daemon_running {
+        let mut retries = 0;
+        while retries < 10 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if matches!(
+                ipc_client.send(IpcCommand::GetStatus).await,
+                Ok(IpcResponse::Status(_))
+            ) {
+                daemon_running = true;
+                break;
+            }
+            retries += 1;
+        }
+    }
+
+    match code.as_deref() {
+        Some("status") => {
+            if !daemon_running {
+                anyhow::bail!("Daemon is not running. Run 'irosh system start'.");
+            }
+            return handle_status(&ipc_client).await;
+        }
+        Some("disable" | "stop") => {
+            if !daemon_running {
+                anyhow::bail!("Daemon is not running.");
+            }
+            return handle_disable(&ipc_client).await;
+        }
+        Some("enable") => {
+            // Treat "enable" as a request to start a wormhole with a random code
+            code = None;
+        }
+        _ => {}
+    }
+
+    let has_node_password = irosh::storage::load_shadow_file(&state)?.is_some();
+    let vault = irosh::storage::load_all_authorized_clients(&state)?;
+
+    // Initiation Rules (Discovery Security Guard):
+    if passwd {
+        // Rule 4: --passwd flag -> prompt and hash exactly like a permanent password.
+    } else if has_node_password {
+        // Rule 3: Node password is set -> Allowed (guarded by node password).
+    } else if vault.is_empty() {
+        // Rule 1: Vault is empty -> Allowed (Bootstrap Phase), but warn.
+        Ui::security("Security Notice:");
+        Ui::info("      Your vault is empty and no password is set.");
+        Ui::info("      The first device to discover this code will become the permanent owner.");
+        if !Ui::soft_confirm("Continue anyway?") {
+            anyhow::bail!("Wormhole cancelled for security.");
+        }
+    } else {
+        // Rule 2: Vault NOT empty and no password set -> BLOCKED.
+        Ui::error(
+            "wormhole blocked: trusted devices exist but no Node Password is set",
+            Some(messages::TIP_WORMHOLE_PASSWD),
+        );
+        anyhow::bail!("Security initiation block.");
+    }
+
+    // Security guard: if the user provided a custom code with no password protection,
+    // enforce a minimum length. The code itself is the only secret, so a short code
+    // (e.g. "x" or "test") is trivially guessable.
+    let is_password_protected = passwd || has_node_password;
+    if let Some(ref custom_code) = code {
+        if !is_password_protected && custom_code.len() < 8 {
+            Ui::error(
+                &format!(
+                    "wormhole code '{}' is too short ({} chars) — minimum 8 chars when no session password is set",
+                    custom_code,
+                    custom_code.len()
+                ),
+                Some(messages::TIP_WORMHOLE_CODE_LENGTH),
+            );
+            anyhow::bail!("Wormhole code too short.");
+        }
+    }
+
+    // If the user passed --passwd, prompt and hash the password now.
+    // This is identical treatment to `irosh passwd set`.
+    let password_hash: Option<String> = if passwd {
+        match Ui::password_input("Enter wormhole session password (one-time use)") {
+            Some(pw) if !pw.is_empty() => {
+                let hash = irosh::auth::hash_password(&pw)?;
+                Ui::success("Wormhole password set (will be destroyed after first use).");
+                Some(hash)
+            }
+            _ => {
+                anyhow::bail!("No password entered. Wormhole cancelled.");
+            }
+        }
+    } else {
+        None
+    };
+
+    // Dispatch to the daemon whenever IPC answers at the resolved state dir, even
+    // when --state was passed explicitly. daemon_running was determined via the IPC
+    // endpoint INSIDE this state dir, so an explicit --state pointing at the daemon's
+    // dir must still use IPC. Otherwise the CLI would fall back to a foreground
+    // Server::bind that conflicts with the running daemon (and hangs on Windows,
+    // where redb's LockFileEx blocks indefinitely on the daemon's held DB lock).
+    if daemon_running {
+        handle_enable_daemon(&ipc_client, code, password_hash, persistent).await
+    } else {
+        handle_foreground_wormhole(&state_root, code, password_hash, persistent).await
+    }
+}
+
+async fn handle_status(client: &IpcClient) -> Result<()> {
+    match client.send(IpcCommand::GetStatus).await? {
+        IpcResponse::Status(info) => {
+            if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+                #[derive(serde::Serialize)]
+                struct WormholeStatusJson {
+                    active: bool,
+                    code: Option<irosh::WormholeCode>,
+                    sessions: usize,
+                }
+                crate::output::print_success(WormholeStatusJson {
+                    active: info.wormhole_active,
+                    code: info.wormhole_code,
+                    sessions: info.active_sessions,
+                });
+                return Ok(());
+            }
+
+            if info.wormhole_active {
+                Ui::success(&format!(
+                    "Wormhole is ACTIVE: {}",
+                    info.wormhole_code.as_deref().unwrap_or("unknown")
+                ));
+            } else {
+                Ui::info("Wormhole is currently disabled.");
+            }
+            Ui::info(&format!("Active sessions: {}", info.active_sessions));
+        }
+        _ => anyhow::bail!("Unexpected response from daemon"),
+    }
+    Ok(())
+}
+
+async fn handle_disable(client: &IpcClient) -> Result<()> {
+    match client.send(IpcCommand::DisableWormhole).await? {
+        IpcResponse::Ok => {
+            if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+                #[derive(serde::Serialize)]
+                struct WormholeDisableJson {
+                    success: bool,
+                }
+                crate::output::print_success(WormholeDisableJson { success: true });
+                return Ok(());
+            }
+            Ui::success("Wormhole disabled.");
+        }
+        IpcResponse::Error(e) => {
+            if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+                crate::output::print_error(&e, "disable_failed");
+                return Ok(());
+            }
+            Ui::error(&format!("failed to disable wormhole: {e}"), None);
+        }
+        _ => anyhow::bail!("Unexpected response from daemon"),
+    }
+    Ok(())
+}
+
+async fn handle_enable_daemon(
+    client: &IpcClient,
+    code: Option<String>,
+    password: Option<String>,
+    persistent: bool,
+) -> Result<()> {
+    let final_code = code.unwrap_or_else(irosh::transport::wormhole::generate_code);
+
+    match client
+        .send(IpcCommand::EnableWormhole {
+            code: final_code.clone(),
+            password,
+            persistent,
+        })
+        .await?
+    {
+        IpcResponse::Ok => {
+            if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+                #[derive(serde::Serialize)]
+                struct WormholeActiveJson {
+                    code: String,
+                    persistent: bool,
+                    mode: &'static str,
+                }
+                crate::output::print_success(WormholeActiveJson {
+                    code: final_code,
+                    persistent,
+                    mode: "daemon",
+                });
+                return Ok(());
+            }
+
+            Ui::success(&format!(
+                "Wormhole active in background! Code: {}",
+                style(&final_code).magenta().bold()
+            ));
+            Ui::info(&format!(
+                "Run 'irosh connect {}' on the other machine.",
+                style(&final_code).magenta()
+            ));
+        }
+        IpcResponse::Error(e) => {
+            if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+                crate::output::print_error(&e, "daemon_error");
+                return Ok(());
+            }
+            Ui::error(
+                &format!("daemon rejected wormhole request: {e}"),
+                Some(messages::TIP_DAEMON_WORMHOLE),
+            );
+        }
+        _ => anyhow::bail!("Unexpected response from daemon"),
+    }
+    Ok(())
+}
+
+async fn handle_foreground_wormhole(
+    state_root: &Path,
+    code: Option<String>,
+    password: Option<String>,
+    persistent: bool,
+) -> Result<()> {
+    let state = StateConfig::new(state_root.to_path_buf());
+    let final_code = code.unwrap_or_else(irosh::transport::wormhole::generate_code);
+
+    Ui::p2p("Starting temporary wormhole server...");
+
+    let options = ServerOptions::new(state)
+        .disable_ipc()
+        .shutdown_on_wormhole_success();
+    let (_ready, server) =
+        tokio::time::timeout(std::time::Duration::from_secs(15), Server::bind(options))
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "Server bind timed out after 15s — is another irosh daemon already running? \
+             Stop it with 'irosh system stop' or use a different --state directory."
+                )
+            })??;
+    let control = server.control_handle();
+
+    let (tx, _) = tokio::sync::oneshot::channel();
+    let code_to_send = final_code.clone();
+    control
+        .send(irosh::InternalCommand::EnableWormhole {
+            code: final_code.clone(),
+            password,
+            persistent,
+            tx,
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("Server channel closed"))?;
+
+    if crate::output::JSON_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+        #[derive(serde::Serialize)]
+        struct WormholeActiveJson {
+            code: String,
+            persistent: bool,
+            mode: &'static str,
+        }
+        crate::output::print_success(WormholeActiveJson {
+            code: code_to_send,
+            persistent,
+            mode: "foreground",
+        });
+    } else {
+        Ui::success(&format!(
+            "Wormhole active (Foreground)! Code: {}",
+            style(&final_code).magenta().bold()
+        ));
+        Ui::info(&format!(
+            "Run 'irosh connect {}' on the other machine.",
+            style(&final_code).magenta()
+        ));
+        Ui::info("Waiting for peer... (Ctrl+C to cancel)");
+    }
+
+    let shutdown = server.shutdown_handle();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            Ui::info("Shutting down wormhole server...");
+            shutdown.close().await;
+        }
+    });
+
+    server.run().await?;
+    Ok(())
+}

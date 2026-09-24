@@ -1,0 +1,6 @@
+type = process
+command = /usr/bin/irosh host --simple
+logfile = /var/log/irosh.log
+restart = true
+smooth-recovery = true
+depends-on: local.target

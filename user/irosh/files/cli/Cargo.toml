@@ -1,0 +1,46 @@
+[package]
+name = "irosh-cli"
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Shedrack Godstime <shedrackgodstime@gmail.com>"]
+description = "CLI for Irosh: SSH sessions over Iroh peer-to-peer transport"
+readme = "../README.md"
+repository = "https://github.com/shedrackgodstime/irosh"
+license = "MIT OR Apache-2.0"
+keywords = ["ssh", "iroh", "p2p", "remote", "shell"]
+categories = ["network-programming", "asynchronous"]
+
+[[bin]]
+name = "irosh"
+path = "src/main.rs"
+
+[dependencies]
+irosh = { path = "../", features = ["server", "client", "storage", "transport"] }
+anyhow = "1.0"
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+indicatif = { version = "0.18.6", default-features = false, features = ["unicode-width", "vt100"] }
+dialoguer = "0.12.0"
+shell-words = "1.1.1"
+unicode-width = "0.2.2"
+console = "0.16.4"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console", "Win32_Foundation"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+proptest = "1.6"
+
+[lints]
+workspace = true

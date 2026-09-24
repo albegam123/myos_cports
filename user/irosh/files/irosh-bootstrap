@@ -1,0 +1,4 @@
+type = scripted
+command = /usr/lib/irosh-bootstrap.sh
+logfile = /var/log/irosh-bootstrap.log
+depends-on: local.target

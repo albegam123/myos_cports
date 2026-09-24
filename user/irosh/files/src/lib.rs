@@ -1,0 +1,110 @@
+#![doc = include_str!("README.md")]
+#![deny(unused_lifetimes)]
+#![deny(unused_import_braces)]
+#![deny(missing_docs)]
+#![deny(clippy::correctness)]
+#![warn(clippy::suspicious)]
+#![allow(clippy::pedantic)]
+#![allow(clippy::multiple_crate_versions)]
+#![allow(clippy::doc_markdown)]
+#![allow(unreachable_pub)]
+#![allow(private_interfaces)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::double_must_use)]
+#![warn(clippy::missing_errors_doc)]
+#![warn(clippy::must_use_candidate)]
+#![warn(clippy::undocumented_unsafe_blocks)]
+#![warn(trivial_casts)]
+#![warn(trivial_numeric_casts)]
+#![deny(variant_size_differences)]
+//!
+//! # Examples
+//!
+//! ## Hosting a P2P Server
+//!
+//! ```no_run
+//! use irosh::{Server, ServerOptions, StateConfig};
+//!
+//! #[tokio::main]
+//! async fn main() -> irosh::Result<()> {
+//!     let options = ServerOptions::new(StateConfig::new("./state".into()));
+//!     let (ready, server) = Server::bind(options).await?;
+//!
+//!     println!("Server Ticket: {}", ready.ticket());
+//!     server.run().await
+//! }
+//! ```
+//!
+//! ## Connecting as a Client
+//!
+//! ```no_run
+//! use irosh::{Client, ClientOptions, StateConfig, Ticket};
+//! use std::str::FromStr;
+//!
+//! #[tokio::main]
+//! async fn main() -> irosh::Result<()> {
+//!     let state = StateConfig::new("./state".into());
+//!     let options = ClientOptions::new(state);
+//!
+//!     let ticket = Ticket::from_str("endpoint...")?;
+//!     let mut session = Client::connect(&options, ticket).await?;
+//!
+//!     session.start_shell().await?;
+//!     Ok(())
+//! }
+//! ```
+
+pub mod auth;
+pub mod client;
+pub mod config;
+pub mod diagnostic;
+pub mod error;
+pub mod metrics;
+pub mod server;
+pub mod session;
+pub mod storage;
+pub mod sys;
+pub mod transport;
+
+pub use config::{
+    AppConfig, EndpointId, LogLevel, PeerId, SecurityConfig, StateConfig, WormholeCode,
+};
+pub use error::{IroshError, Result};
+
+pub use metrics::{Metrics, MetricsSnapshot};
+
+pub use auth::{
+    AuthMethod, AuthMode, Authenticator, CombinedAuth, ConfirmationCallback, Credentials,
+    KeyOnlyAuth, PasswordAuth, PasswordPrompter, UnifiedAuthenticator,
+};
+
+#[cfg(feature = "server")]
+pub use server::{Server, ServerOptions, ServerReady, ServerShutdown};
+
+/// Re-export russh for downstream consumers (CLI).
+#[cfg(any(feature = "server", feature = "client"))]
+pub use russh;
+
+/// Re-export iroh for downstream consumers (CLI).
+#[cfg(feature = "transport")]
+pub use iroh;
+
+#[cfg(feature = "client")]
+pub use client::{
+    Client, ClientOptions, ResolvedTarget, Session, SessionEvent, TransferProgress, ipc::IpcClient,
+};
+
+#[cfg(feature = "server")]
+pub use server::ipc::{InternalCommand, IpcCommand, IpcResponse};
+
+pub use session::{PtyOptions, PtySize, SessionState};
+
+pub use transport::{
+    metadata::PeerMetadata,
+    ticket::Ticket,
+    transfer::{
+        GetRequest, PutRequest, TransferComplete, TransferFailure, TransferFailureCode,
+        TransferReady,
+    },
+};

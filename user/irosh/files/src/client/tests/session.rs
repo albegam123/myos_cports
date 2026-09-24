@@ -1,0 +1,199 @@
+use super::*;
+use crate::session::pty::pty_size;
+use russh::ChannelMsg;
+
+#[tokio::test]
+async fn session_state_transitions_from_authenticated_to_shell_ready_to_closed() {
+    let server_state = temp_state_dir("server-session-state");
+    let client_state = temp_state_dir("client-session-state");
+    let (mut session, server_task) = connect_test_session(&server_state, &client_state).await;
+
+    assert_eq!(session.state(), SessionState::Authenticated);
+    session.start_shell().await.unwrap();
+    assert_eq!(session.state(), SessionState::ShellReady);
+    session.disconnect().await.unwrap();
+    assert_eq!(session.state(), SessionState::Closed);
+
+    let _ = server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn session_pty_shell_and_disconnect_lifecycle() {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let server_state = temp_state_dir("server-pty-lifecycle");
+        let client_state = temp_state_dir("client-pty-lifecycle");
+        let (mut session, server_task) = connect_test_session(&server_state, &client_state).await;
+
+        // Request PTY with specific size
+        let size = pty_size(120, 40, 10, 20);
+        let opts = PtyOptions::new("xterm-256color", size);
+        session.request_pty(opts).await.unwrap();
+
+        // Start shell
+        session.start_shell().await.unwrap();
+        assert_eq!(session.state(), SessionState::ShellReady);
+
+        // Resize terminal
+        let new_size = pty_size(80, 24, 5, 10);
+        session.resize(new_size).await.unwrap();
+
+        // Disconnect and verify terminal state
+        session.disconnect().await.unwrap();
+        assert_eq!(session.state(), SessionState::Closed);
+
+        // Verify idempotent disconnect
+        session.disconnect().await.unwrap();
+        assert_eq!(session.state(), SessionState::Closed);
+
+        // Verify methods fail after disconnect
+        let err = session.start_shell().await.unwrap_err();
+        assert!(
+            err.to_string().contains("closed"),
+            "expected 'closed' error, got: {err}"
+        );
+
+        let _ = server_task.await.unwrap();
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[tokio::test]
+async fn exec_emits_stdout_and_close_events() {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let server_state = temp_state_dir("server-exec");
+        let client_state = temp_state_dir("client-exec");
+        let (mut session, server_task) = connect_test_session(&server_state, &client_state).await;
+
+        let handle = session.handle.read().await;
+        let mut channel = handle.channel_open_session().await.unwrap();
+        channel.exec(true, "echo exec-ok").await.unwrap();
+
+        drop(handle);
+
+        let mut stdout = Vec::new();
+        loop {
+            let Some(msg) = channel.wait().await else {
+                break;
+            };
+            match msg {
+                ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
+                ChannelMsg::Close => break,
+                _ => {}
+            }
+        }
+
+        let stdout = String::from_utf8(stdout).unwrap();
+        assert!(stdout.contains("exec-ok"), "unexpected stdout: {stdout}");
+
+        let _ = session.disconnect().await;
+        let _ = server_task.await.unwrap();
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[tokio::test]
+async fn capture_exec_collects_stdout_and_stderr() {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let server_state = temp_state_dir("server-exec-cap");
+        let client_state = temp_state_dir("client-exec-cap");
+        let (mut session, server_task) = connect_test_session(&server_state, &client_state).await;
+
+        // The default Windows shell is Windows PowerShell 5.1 (no `&&`/`>&2`),
+        // so use a shell-agnostic command that writes to both streams.
+        let command = if cfg!(windows) {
+            "Write-Output out-msg; [Console]::Error.WriteLine('err-msg')"
+        } else {
+            "echo out-msg && echo err-msg >&2"
+        };
+        let output = session
+            .capture_exec(command)
+            .await
+            .expect("capture_exec failed");
+
+        let combined_output = String::from_utf8(output.stdout.clone()).unwrap();
+
+        assert!(
+            combined_output.contains("out-msg"),
+            "missing stdout msg: {combined_output}"
+        );
+        assert!(
+            combined_output.contains("err-msg"),
+            "missing stderr msg: {combined_output}"
+        );
+        assert_eq!(output.exit_status, 0);
+
+        let _ = session.disconnect().await;
+        let _ = server_task.await.unwrap();
+    })
+    .await
+    .expect("Test timed out");
+}
+
+/// Regression: an abrupt peer disappearance (no `CHANNEL_CLOSE`) used to leave
+/// the server-side PTY child, its reader task, and its writer thread running for
+/// the lifetime of the daemon. `ServerHandler::terminate_all_channels` (driven
+/// by `SshProtocol::accept` once the SSH session ends) must reap them.
+#[cfg(unix)]
+#[tokio::test]
+async fn connection_teardown_reaps_live_shell_process() {
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        let server_state = temp_state_dir("server-orphan");
+        let client_state = temp_state_dir("client-orphan");
+        let (mut session, _server_task, handler) =
+            connect_test_session_with_handler(&server_state, &client_state).await;
+
+        let size = pty_size(80, 24, 0, 0);
+        session
+            .request_pty(PtyOptions::new("xterm-256color", size))
+            .await
+            .unwrap();
+        session.start_shell().await.unwrap();
+
+        // Wait for the server to register the PTY child.
+        let mut pids = handler.active_process_pids();
+        let register_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while pids.is_empty() && std::time::Instant::now() < register_deadline {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            pids = handler.active_process_pids();
+        }
+        assert!(!pids.is_empty(), "server never registered a PTY child");
+
+        handler.terminate_all_channels();
+
+        // Every child must be killed and reaped by its reader task.
+        let kill_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        for pid in &pids {
+            loop {
+                // SAFETY: signal 0 performs only an existence/permission check
+                // and does not deliver a signal; `pid` is a live pid.
+                let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
+                if !alive {
+                    break;
+                }
+                if std::time::Instant::now() >= kill_deadline {
+                    let process_state = tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        tokio::process::Command::new("ps")
+                            .args(["-o", "pid=,ppid=,pgid=,stat=,comm=", "-p", &pid.to_string()])
+                            .output(),
+                    )
+                    .await;
+                    let process_state = match process_state {
+                        Ok(Ok(output)) => String::from_utf8_lossy(&output.stdout).into_owned(),
+                        other => format!("{other:?}"),
+                    };
+                    panic!(
+                        "shell pid {pid} survived connection teardown; tracked={:?}; ps={process_state}",
+                        handler.active_process_pids()
+                    );
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        }
+        assert!(handler.active_process_pids().is_empty());
+    })
+    .await
+    .expect("Test timed out");
+}

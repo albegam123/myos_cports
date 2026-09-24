@@ -1,0 +1,5 @@
+# Serve a getty on the primary virtual console so the system is usable
+# from a directly attached USB keyboard on a graphical (UEFI) boot.
+# nyagetty's dinit-agetty helper sources this file; serial consoles are
+# still auto-detected from the kernel command line.
+EXTRA_GETTYS="/dev/tty1"
