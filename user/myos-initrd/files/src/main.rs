@@ -203,6 +203,61 @@ fn root_path(spec: &str) -> PathBuf {
     PathBuf::from(spec)
 }
 
+fn extract_tag<'a>(line: &'a str, tag: &str) -> Option<String> {
+    let marker = format!("{tag}\"");
+    let start = line.find(&marker)? + marker.len();
+    let end = line[start..].find('"')? + start;
+    let value = &line[start..end];
+    if value.is_empty() || value.contains('/') {
+        return None;
+    }
+    Some(value.to_string())
+}
+
+fn populate_block_links() {
+    // Every block device (whole disks and partitions) is exposed under
+    // /sys/class/block once devtmpfs has populated /dev.  Probe each node with
+    // blkid and mirror its stable identifiers under /dev/disk/by-* so that
+    // root=UUID=, PARTUUID=, LABEL= and PARTLABEL= resolve without udev.
+    let Ok(entries) = fs::read_dir("/sys/class/block") else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        let dev = format!("/dev/{name}");
+        if !Path::new(&dev).exists() {
+            continue;
+        }
+        let Ok(output) = Command::new("/bin/armybox").arg("blkid").arg(&dev).output() else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let line = match stdout.lines().next() {
+            Some(line) => line,
+            None => continue,
+        };
+        for (tag, dir) in [
+            ("UUID=", "by-uuid"),
+            ("PARTUUID=", "by-partuuid"),
+            ("LABEL=", "by-label"),
+            ("PARTLABEL=", "by-partlabel"),
+        ] {
+            let Some(value) = extract_tag(line, tag) else {
+                continue;
+            };
+            let link_dir = format!("/dev/disk/{dir}");
+            let _ = fs::create_dir_all(&link_dir);
+            let target = format!("{link_dir}/{value}");
+            let _ = fs::remove_file(&target);
+            let _ = std::os::unix::fs::symlink(&dev, &target);
+        }
+    }
+}
+
 fn wait_for_root(cfg: &BootConfig) -> Result<PathBuf, String> {
     if cfg.root.is_empty() {
         return Err("kernel command line has no root= device".into());
@@ -213,6 +268,7 @@ fn wait_for_root(cfg: &BootConfig) -> Result<PathBuf, String> {
     let path = root_path(&cfg.root);
     let start = Instant::now();
     loop {
+        populate_block_links();
         if path.exists() {
             return Ok(path);
         }
